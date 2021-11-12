@@ -1,6 +1,14 @@
+---
+html: transaction-cost.html
+parent: transaction-basics.html
+blurb: The transaction cost is a small amount of XRP destroyed to send a transaction, which protects the ledger from spam. Learn how the transaction cost applies.
+labels:
+  - Fees
+  - Transaction Sending
+---
 # Transaction Cost
 
-To protect the XRP Ledger from being disrupted by spam and denial-of-service attacks, each transaction must destroy a small amount of [XRP](https://ripple.com/xrp-portal/). This _transaction cost_ is designed to increase along with the load on the network, making it very expensive to deliberately or inadvertently overload the network.
+To protect the XRP Ledger from being disrupted by spam and denial-of-service attacks, each transaction must destroy a small amount of [XRP](xrp.html). This _transaction cost_ is designed to increase along with the load on the network, making it very expensive to deliberately or inadvertently overload the network.
 
 Every transaction must [specify how much XRP to destroy](#specifying-the-transaction-cost) to pay the transaction cost.
 
@@ -21,6 +29,7 @@ Some transactions have different transaction costs:
 | [Key Reset Transaction](#key-reset-transaction) | 0 |
 | [Multi-signed Transaction](multi-signing.html) | 10 drops × (1 + Number of Signatures Provided) |
 | [EscrowFinish Transaction with Fulfillment](escrowfinish.html) | 10 drops × (33 + (Fulfillment size in bytes ÷ 16)) |
+| [AccountDelete Transaction](accounts.html#deletion-of-accounts) | 5,000,000 drops |
 
 
 ## Beneficiaries of the Transaction Cost
@@ -30,7 +39,7 @@ The transaction cost is not paid to any party: the XRP is irrevocably destroyed.
 
 ## Load Cost and Open Ledger Cost
 
-When the [FeeEscalation amendment](known-amendments.html#feeescalation) is enabled, there are two thresholds for the transaction cost:
+When the [FeeEscalation amendment][] is enabled, there are two thresholds for the transaction cost:
 
 * If the transaction cost does not meet a `rippled` server's [load-based transaction cost threshold](#local-load-cost), the server ignores the transaction completely. (This logic is essentially unchanged with or without the amendment.)
 * If the transaction cost does not meet a `rippled` server's [open ledger cost threshold](#open-ledger-cost), the server queues the transaction for a later ledger.
@@ -44,7 +53,7 @@ This divides transactions into roughly three categories:
 
 ## Local Load Cost
 
-Each `rippled` server maintains a cost threshold based on its current load. If you submit a transaction with a `Fee` value that is lower than current load-based transaction cost of the `rippled` server, that server neither applies nor relays the transaction. (**Note:** If you submit a transaction through an [admin connection](get-started-with-the-rippled-api.html), the server applies and relays the transaction as long as the transaction meets the un-scaled minimum transaction cost.) A transaction is very unlikely to survive [the consensus process](https://ripple.com/build/ripple-ledger-consensus-process/) unless its `Fee` value meets the requirements of a majority of servers.
+Each `rippled` server maintains a cost threshold based on its current load. If you submit a transaction with a `Fee` value that is lower than current load-based transaction cost of the `rippled` server, that server neither applies nor relays the transaction. (**Note:** If you submit a transaction through an [admin connection](get-started-using-http-websocket-apis.html), the server applies and relays the transaction as long as the transaction meets the un-scaled minimum transaction cost.) A transaction is very unlikely to survive [the consensus process](consensus.html) unless its `Fee` value meets the requirements of a majority of servers.
 
 ## Open Ledger Cost
 
@@ -60,34 +69,7 @@ See also: [Fee Escalation explanation in `rippled` repository](https://github.co
 
 When `rippled` receives a transaction that meets the server's local load cost but not the [open ledger cost](#open-ledger-cost), the server estimates whether the transaction is "likely to be included" in a later ledger. If so, the server adds the transaction to the transaction queue and relays the transaction to other members of the network. Otherwise, the server discards the transaction. The server tries to minimize the amount of network load caused by transactions that would not pay a transaction cost, since [the transaction cost only applies when a transaction is included in a validated ledger](#transaction-costs-and-failed-transactions).
 
-When the current open ledger closes and the server starts a new open ledger, the server starts taking transactions from the queue to include in the new open ledger. The transaction queue is sorted with the transactions that would pay the highest transaction cost first, proportional to the [reference cost](#reference-transaction-cost) of those transactions. Transactions that pay the same transaction cost are queued in the order the server receives them.
-
-**Note:** When `rippled` queues a transaction, the provisional [transaction response code](transaction-results.html) is `terQUEUED`. This means that the transaction is likely to succeed in a future ledger version. As with all provisional response codes, the outcome of the transaction is not final until the transaction is either included in a validated ledger, or [rendered permanently invalid](finality-of-results.html).
-
-#### Queuing Restrictions
-
-The `rippled` server uses a variety of heuristics to estimate which transactions are "likely to be included in a ledger." The current implementation uses the following rules to decide which transactions to queue:
-
-* Transactions must be properly-formed and [authorized](transaction-basics.html#authorizing-transactions) with valid signatures.
-* Transactions with an `AccountTxnID` field cannot be queued.
-* A single sending address can have at most 10 transactions queued at the same time. In order for a transaction to be queued, the sender must have enough XRP to pay all the XRP costs of all the sender's queued transactions including both the `Fee` fields and the sum of the XRP that each transaction could send. [New in: rippled 0.32.0][]
-* If a transaction affects how the sending address authorizes transactions, no other transactions from the same address can be queued behind it. [New in: rippled 0.32.0][]
-* If the transaction includes a `LastLedgerSequence` field, the value of that field must be at least **the current ledger index + 2**.
-
-#### Fee Averaging
-
-[New in: rippled 0.33.0][]
-
-If a sending address has one or more transactions queued, that sender can "push" the existing queued transactions into the open ledger by submitting a new transaction with a high enough transaction cost to pay for all of them. Specifically, the new transaction must increase the total transaction cost of the queued transactions from the same sending address, including the new transaction, to cover the [open ledger cost](#open-ledger-cost) of each transaction as it gets added to the ledger. The total must include the increased open ledger cost for each new transaction. The transactions must still follow the other [queuing restrictions](#queuing-restrictions) and the sending address must have enough XRP to pay the transaction costs of all the queued transactions.
-
-This feature helps you work around a particular situation. If you submitted one or more transactions with a low cost, which got queued, you cannot send new transactions from the same address unless you do one of the following:
-
-* Wait for the queued transactions to be included in a validated ledger, _or_
-* Wait for the queued transactions to be permanently invalidated if the transactions have the [`LastLedgerSequence` field](reliable-transaction-submission.html#lastledgersequence) set, _or_
-* [Cancel the queued transactions](cancel-or-skip-a-transaction.html) by submitting a new transaction with the same sequence number.
-
-If none of the above occur, transactions can stay in the queue for a theoretically unlimited amount of time, while other senders can "cut in line" by submitting transactions with higher transaction costs. Since signed transactions are immutable, you cannot increase the transaction cost of the queued transactions to increase their priority. If you do not want to invalidate the previously submitted transactions, fee averaging provides a workaround. If you increase the transaction cost of your new transaction to compensate, you can ensure the queued transactions are included in an open ledger right away.
-
+For more information on queued transactions, see [Transaction Queue](transaction-queue.html).
 
 ## Reference Transaction Cost
 
@@ -109,7 +91,7 @@ _Fee levels_ represent the proportional difference between the minimum cost and 
 
 The `rippled` APIs have two ways to query the local load-based transaction cost: the `server_info` command (intended for humans) and the `server_state` command (intended for machines).
 
-If the [FeeEscalation amendment](known-amendments.html#feeescalation) is enabled, you can use the [fee method][] to check the open ledger cost.
+If the [FeeEscalation amendment][] is enabled, you can use the [fee method][] to check the open ledger cost.
 
 ### server_info
 
@@ -165,18 +147,33 @@ When a transaction has already been distributed to the network, but the account 
 
 ## Key Reset Transaction
 
-As a special case, an account can send a [SetRegularKey](setregularkey.html) transaction with a transaction cost of `0`, as long as the account's [lsfPasswordSpent flag](accountroot.html) is disabled. This transaction must be signed by the account's _master key pair_. Sending this transaction enables the lsfPasswordSpent flag.
+As a special case, an account can send a [SetRegularKey](setregularkey.html) transaction with a transaction cost of `0`, as long as the account's [`lsfPasswordSpent` flag](accountroot.html) is disabled. This transaction must be signed by the account's _master key pair_. Sending this transaction enables the `lsfPasswordSpent` flag.
 
 This feature is designed to allow you to recover an account if the regular key is compromised, without worrying about whether the compromised account has any XRP available. This way, you can regain control of the account before you send more XRP to it.
 
-The [lsfPasswordSpent flag](accountroot.html) starts out disabled. It gets enabled when you send a SetRegularKey transaction signed by the master key pair. It gets disabled again when the account receives a [Payment](payment.html) of XRP.
+The [`lsfPasswordSpent` flag](accountroot.html) starts out disabled. It gets enabled when you send a SetRegularKey transaction signed by the master key pair. It gets disabled again when the account receives a [Payment](payment.html) of XRP.
 
-When the [FeeEscalation amendment](known-amendments.html#feeescalation) is enabled, `rippled` prioritizes key reset transactions above other transactions even though the nominal transaction cost of a key reset transaction is zero.
+When the [FeeEscalation amendment][] is enabled, `rippled` prioritizes key reset transactions above other transactions even though the nominal transaction cost of a key reset transaction is zero.
 
 
 ## Changing the Transaction Cost
 
 The XRP Ledger has a mechanism for changing the minimum transaction cost to account for long-term changes in the value of XRP. Any changes have to be approved by the consensus process. See [Fee Voting](fee-voting.html) for more information.
+
+
+## See Also
+
+- **Concepts:**
+    - [Reserves](reserves.html)
+    - [Fee Voting](fee-voting.html)
+    - [Transaction Queue](transaction-queue.html)
+- **Tutorials:**
+    - [Reliable Transaction Submission](reliable-transaction-submission.html)
+- **References:**
+    - [fee method][]
+    - [server_info method][]
+    - [FeeSettings object](feesettings.html)
+    - [SetFee pseudo-transaction][]
 
 <!--{# common link defs #}-->
 {% include '_snippets/rippled-api-links.md' %}			
