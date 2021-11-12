@@ -56,10 +56,8 @@ def label_sizes(pages):
     from 1 to 5, based on the total number of pages with that label. (A larger
     size means the label contains more pages.)
     """
-
     # Note: this is basically calculating a 5-bin histogram, but I didn't want
     # to add another dependency like numpy just to do this.
-
     labels = [page["landing_for"] for page in pages if "landing_for" in page]
     label_counts = Counter()
     for page in pages:

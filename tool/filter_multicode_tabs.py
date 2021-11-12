@@ -18,7 +18,6 @@ def filter_html(html, mode="html", **kwargs):
     can use this div for styling even in PDF format. Doesn't apply to Markdown
     since most parsers won't parse markdown inside HTML blocks.
     """
-
     if mode == "md":
         return html
 
